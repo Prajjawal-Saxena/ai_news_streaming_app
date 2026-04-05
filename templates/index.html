@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI News Assistant</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-top: #081224;
+            --bg-bottom: #0b1730;
+            --panel: rgba(20, 33, 58, 0.96);
+            --panel-border: rgba(120, 160, 220, 0.16);
+            --assistant-bg: linear-gradient(180deg, rgba(50, 64, 90, 0.98), rgba(36, 48, 72, 0.98));
+            --assistant-border: rgba(152, 180, 225, 0.12);
+            --user-bg: linear-gradient(135deg, #52c9ff 0%, #2a9be8 100%);
+            --accent: #7dd3fc;
+            --accent-strong: #57c7ff;
+            --text-main: #e5eefc;
+            --text-muted: #9fb4d9;
+            --surface-soft: rgba(10, 18, 34, 0.34);
+        }
+
+        body {
+            margin: 0;
+            font-family: Inter, Arial, sans-serif;
+            background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+        }
+
+        .app-shell {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 18px;
+        }
+
+        .brand {
+            font-size: 38px;
+            margin-right: 12px;
+        }
+
+        .title-wrap h1 {
+            margin: 0;
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--accent-strong);
+            letter-spacing: 0.2px;
+        }
+
+        .title-wrap p {
+            margin: 6px 0 0;
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+
+        .chat-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 18px;
+        }
+
+        .chat-card {
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 22px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 18px 22px;
+            border-bottom: 1px solid rgba(120, 160, 220, 0.12);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h2 {
+            margin: 0;
+            font-size: 18px;
+            color: #dbeafe;
+        }
+
+        .status-badge {
+            background: rgba(87, 199, 255, 0.14);
+            color: var(--accent);
+            border: 1px solid rgba(125, 211, 252, 0.22);
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .chat-box {
+            height: 58vh;
+            min-height: 460px;
+            max-height: 760px;
+            overflow-y: auto;
+            padding: 26px 22px;
+            background:
+                radial-gradient(circle at top, rgba(49, 92, 173, 0.18), transparent 28%),
+                rgba(16, 26, 47, 0.85);
+        }
+
+        .msg-row {
+            display: flex;
+            margin-bottom: 18px;
+        }
+
+        .msg-row.user {
+            justify-content: flex-end;
+        }
+
+        .msg-row.assistant {
+            justify-content: flex-start;
+        }
+
+        .msg {
+            max-width: 78%;
+            padding: 16px 18px;
+            border-radius: 18px;
+            line-height: 1.65;
+            font-size: 15px;
+            overflow-wrap: anywhere;
+        }
+
+        .msg.user {
+            background: var(--user-bg);
+            color: #06111f;
+            border-bottom-right-radius: 6px;
+            font-weight: 600;
+            white-space: pre-wrap;
+        }
+
+        .msg.assistant {
+            background: var(--assistant-bg);
+            color: #edf4ff;
+            border: 1px solid var(--assistant-border);
+            border-bottom-left-radius: 6px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .msg.assistant.loading {
+            max-width: 340px;
+            padding: 14px 16px;
+        }
+
+        .msg.assistant.streaming,
+        .msg.assistant.formatted {
+            width: min(100%, 780px);
+            max-width: 100%;
+        }
+
+        .thinking-card {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .thinking-header {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: #dbeafe;
+            font-weight: 600;
+        }
+
+        .thinking-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: var(--accent);
+            box-shadow: 0 0 0 6px rgba(125, 211, 252, 0.12);
+        }
+
+        .thinking-step {
+            color: #c7d7f2;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .thinking-progress {
+            position: relative;
+            width: 100%;
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.16);
+            overflow: hidden;
+        }
+
+        .thinking-progress span {
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 36%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, rgba(125, 211, 252, 0), rgba(125, 211, 252, 0.92), rgba(125, 211, 252, 0));
+            animation: progressSlide 1.2s ease-in-out infinite;
+        }
+
+        .streaming-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .streaming-label {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        .streaming-text {
+            white-space: pre-wrap;
+            color: #edf4ff;
+        }
+
+        .news-response {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .news-response h3 {
+            margin: 0;
+            font-size: 21px;
+            color: #f8fbff;
+        }
+
+        .news-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .news-item {
+            padding: 16px;
+            border-radius: 16px;
+            background: rgba(8, 15, 28, 0.3);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+        }
+
+        .news-item-top {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .news-number {
+            width: 30px;
+            height: 30px;
+            flex: 0 0 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: rgba(87, 199, 255, 0.14);
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .news-copy {
+            min-width: 0;
+        }
+
+        .news-copy h4 {
+            margin: 0;
+            font-size: 17px;
+            line-height: 1.4;
+            color: #f3f8ff;
+        }
+
+        .news-copy p {
+            margin: 8px 0 0;
+            color: #d8e3f8;
+        }
+
+        .news-response a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .news-response a:hover {
+            text-decoration: underline;
+        }
+
+        .source-card {
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: var(--surface-soft);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+        }
+
+        .source-card h4 {
+            margin: 0 0 10px;
+            font-size: 14px;
+            color: var(--accent);
+        }
+
+        .source-list {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .source-list li {
+            margin-bottom: 8px;
+            color: #dbe7fb;
+        }
+
+        .plain-response {
+            display: grid;
+            gap: 10px;
+        }
+
+        .plain-response p {
+            margin: 0;
+            color: #edf4ff;
+            white-space: pre-wrap;
+        }
+
+        .composer {
+            padding: 18px 22px 22px;
+            border-top: 1px solid rgba(120, 160, 220, 0.12);
+            background: rgba(15, 24, 42, 0.95);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: stretch;
+        }
+
+        .input-row + .input-row {
+            margin-top: 14px;
+        }
+
+        input {
+            flex: 1;
+            border: 1px solid rgba(135, 164, 220, 0.18);
+            background: #f8fbff;
+            color: #0f172a;
+            padding: 14px 16px;
+            font-size: 15px;
+            border-radius: 14px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--accent-strong);
+            box-shadow: 0 0 0 3px rgba(87, 199, 255, 0.12);
+        }
+
+        button {
+            border: none;
+            border-radius: 14px;
+            padding: 0 20px;
+            min-width: 120px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            color: #081224;
+            background: linear-gradient(135deg, #63d4ff 0%, #39b8f4 100%);
+            box-shadow: 0 10px 24px rgba(59, 188, 255, 0.22);
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 12px;
+            color: #94a3b8;
+            font-size: 13px;
+            gap: 12px;
+        }
+
+        @keyframes progressSlide {
+            0% {
+                transform: translateX(-115%);
+            }
+            100% {
+                transform: translateX(320%);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .app-shell {
+                padding: 14px;
+            }
+
+            .title-wrap h1 {
+                font-size: 28px;
+            }
+
+            .chat-box {
+                height: 56vh;
+                min-height: 380px;
+            }
+
+            .msg,
+            .msg.assistant.loading,
+            .msg.assistant.streaming,
+            .msg.assistant.formatted {
+                width: 100%;
+                max-width: 100%;
+            }
+
+            .input-row {
+                flex-direction: column;
+            }
+
+            button {
+                min-height: 48px;
+                width: 100%;
+            }
+
+            .meta {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <div class="topbar">
+            <div class="brand">&#128640;</div>
+            <div class="title-wrap">
+                <h1>AI News Assistant</h1>
+                <p>Ask for the latest AI updates, then email the result in one click.</p>
+            </div>
+        </div>
+
+        <div class="chat-layout">
+            <div class="chat-card">
+                <div class="chat-header">
+                    <h2>Latest AI Briefing</h2>
+                    <div class="status-badge" id="statusBadge">Ready</div>
+                </div>
+
+                <div id="chatBox" class="chat-box"></div>
+
+                <div class="composer">
+                    <div class="input-row">
+                        <input
+                            id="queryInput"
+                            type="text"
+                            placeholder="Ask something like: Top 3 AI news today"
+                            autocomplete="off"
+                        />
+                        <button id="sendBtn" onclick="getNews()">Search</button>
+                    </div>
+
+                    <div class="input-row">
+                        <input
+                            id="emailInput"
+                            type="email"
+                            placeholder="Enter your email"
+                            autocomplete="off"
+                        />
+                        <button id="emailBtn" onclick="sendEmail()">Send Email</button>
+                    </div>
+
+                    <div class="meta">
+                        <span id="helperText">Responses stream live as they are generated.</span>
+                        <span id="charCount"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let latestAssistantPlainText = "";
+        let activeEventSource = null;
+
+        function scrollChatToBottom() {
+            const chatBox = document.getElementById("chatBox");
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function setStatus(text) {
+            document.getElementById("statusBadge").innerText = text;
+        }
+
+        function setHelperText(text) {
+            document.getElementById("helperText").innerText = text;
+        }
+
+        function updateCharCount() {
+            document.getElementById("charCount").innerText =
+                latestAssistantPlainText ? `${latestAssistantPlainText.length} chars` : "";
+        }
+
+        function closeActiveEventSource() {
+            if (activeEventSource) {
+                activeEventSource.close();
+                activeEventSource = null;
+            }
+        }
+
+        function createMessageRow(type, contentHtml = "", extraClass = "") {
+            const chatBox = document.getElementById("chatBox");
+
+            const row = document.createElement("div");
+            row.className = `msg-row ${type}`;
+
+            const bubble = document.createElement("div");
+            bubble.className = `msg ${type}${extraClass ? ` ${extraClass}` : ""}`;
+            bubble.innerHTML = contentHtml;
+
+            row.appendChild(bubble);
+            chatBox.appendChild(row);
+
+            scrollChatToBottom();
+            return bubble;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.innerText = text;
+            return div.innerHTML;
+        }
+
+        function createThinkingBubble() {
+            return createMessageRow(
+                "assistant",
+                [
+                    "<div class='thinking-card'>",
+                    "  <div class='thinking-header'>",
+                    "    <span class='thinking-dot'></span>",
+                    "    <span>Thinking</span>",
+                    "  </div>",
+                    "  <div class='thinking-step' data-thinking-step>Searching trusted AI sources</div>",
+                    "  <div class='thinking-progress'><span></span></div>",
+                    "</div>"
+                ].join(""),
+                "loading"
+            );
+        }
+
+        function updateThinkingBubble(bubble, stepText) {
+            const step = bubble.querySelector("[data-thinking-step]");
+            if (step && stepText) {
+                step.textContent = stepText;
+            }
+        }
+
+        function ensureStreamingView(bubble) {
+            if (bubble.dataset.mode === "streaming") {
+                return bubble.querySelector("[data-streaming-text]");
+            }
+
+            bubble.dataset.mode = "streaming";
+            bubble.classList.remove("loading");
+            bubble.classList.add("streaming");
+            bubble.innerHTML = [
+                "<div class='streaming-shell'>",
+                "  <div class='streaming-label'>Drafting answer</div>",
+                "  <div class='streaming-text' data-streaming-text></div>",
+                "</div>"
+            ].join("");
+
+            return bubble.querySelector("[data-streaming-text]");
+        }
+
+        function sanitizeUrl(url) {
+            try {
+                const parsed = new URL(url);
+                if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+                    return parsed.toString();
+                }
+            } catch (error) {
+                return null;
+            }
+
+            return null;
+        }
+
+        function appendTextWithLinks(container, text) {
+            const urlRegex = /https?:\/\/[^\s)]+/g;
+            let lastIndex = 0;
+
+            for (const match of text.matchAll(urlRegex)) {
+                const startIndex = match.index || 0;
+                const rawUrl = match[0];
+                const safeUrl = sanitizeUrl(rawUrl);
+
+                if (startIndex > lastIndex) {
+                    container.appendChild(document.createTextNode(text.slice(lastIndex, startIndex)));
+                }
+
+                if (safeUrl) {
+                    const anchor = document.createElement("a");
+                    anchor.href = safeUrl;
+                    anchor.target = "_blank";
+                    anchor.rel = "noopener noreferrer";
+                    anchor.textContent = rawUrl;
+                    container.appendChild(anchor);
+                } else {
+                    container.appendChild(document.createTextNode(rawUrl));
+                }
+
+                lastIndex = startIndex + rawUrl.length;
+            }
+
+            if (lastIndex < text.length) {
+                container.appendChild(document.createTextNode(text.slice(lastIndex)));
+            }
+        }
+
+        function extractSources(text) {
+            const sources = [];
+            const seen = new Set();
+
+            for (const match of text.matchAll(/https?:\/\/[^\s)]+/g)) {
+                const safeUrl = sanitizeUrl(match[0]);
+                if (!safeUrl || seen.has(safeUrl)) {
+                    continue;
+                }
+
+                seen.add(safeUrl);
+                sources.push({
+                    name: `Source ${sources.length + 1}`,
+                    url: safeUrl
+                });
+            }
+
+            return sources;
+        }
+
+        function parseSources(sectionText, fallbackText) {
+            const sources = [];
+            const seen = new Set();
+
+            sectionText
+                .split("\n")
+                .map(line => line.trim())
+                .filter(Boolean)
+                .forEach(line => {
+                    const cleaned = line.replace(/^-+\s*/, "");
+                    const urlMatch = cleaned.match(/https?:\/\/[^\s)]+/);
+                    if (!urlMatch) {
+                        return;
+                    }
+
+                    const safeUrl = sanitizeUrl(urlMatch[0]);
+                    if (!safeUrl || seen.has(safeUrl)) {
+                        return;
+                    }
+
+                    let name = cleaned.slice(0, urlMatch.index).replace(/[:\-]+$/, "").trim();
+                    if (!name) {
+                        name = `Source ${sources.length + 1}`;
+                    }
+
+                    seen.add(safeUrl);
+                    sources.push({ name, url: safeUrl });
+                });
+
+            if (sources.length > 0) {
+                return sources;
+            }
+
+            return extractSources(fallbackText);
+        }
+
+        function renderFallbackResponse(text) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "plain-response";
+
+            const blocks = text
+                .replace(/\r\n/g, "\n")
+                .split(/\n{2,}/)
+                .map(block => block.trim())
+                .filter(Boolean);
+
+            if (blocks.length === 0) {
+                const paragraph = document.createElement("p");
+                paragraph.textContent = text.trim();
+                wrapper.appendChild(paragraph);
+                return wrapper;
+            }
+
+            blocks.forEach(block => {
+                const paragraph = document.createElement("p");
+                appendTextWithLinks(paragraph, block);
+                wrapper.appendChild(paragraph);
+            });
+
+            return wrapper;
+        }
+
+        function renderFormattedNews(text) {
+            const normalized = text.replace(/\r\n/g, "\n").trim();
+            const sourceSplit = normalized.split(/###\s*Sources/i);
+            const newsPart = sourceSplit[0].replace(/^###\s*Top 3 AI News Today\s*/i, "").trim();
+            const sourcesPart = sourceSplit[1] || "";
+
+            const itemRegex = /(?:^|\n)(\d+)\.\s*(.+?)(?:\n\s*-\s*|\s+-\s+)([\s\S]*?)(?=\n\d+\.\s|\n###\s*Sources|$)/g;
+            const items = [];
+            let match;
+
+            while ((match = itemRegex.exec(newsPart)) !== null) {
+                items.push({
+                    number: match[1],
+                    headline: match[2].trim(),
+                    summary: match[3].trim().replace(/\n+/g, " ")
+                });
+            }
+
+            if (items.length === 0) {
+                return renderFallbackResponse(normalized);
+            }
+
+            const wrapper = document.createElement("div");
+            wrapper.className = "news-response";
+
+            const title = document.createElement("h3");
+            title.textContent = "Top 3 AI News Today";
+            wrapper.appendChild(title);
+
+            const list = document.createElement("div");
+            list.className = "news-list";
+
+            items.forEach(item => {
+                const card = document.createElement("article");
+                card.className = "news-item";
+
+                const top = document.createElement("div");
+                top.className = "news-item-top";
+
+                const number = document.createElement("div");
+                number.className = "news-number";
+                number.textContent = item.number;
+
+                const copy = document.createElement("div");
+                copy.className = "news-copy";
+
+                const headline = document.createElement("h4");
+                headline.textContent = item.headline;
+
+                const summary = document.createElement("p");
+                appendTextWithLinks(summary, item.summary);
+
+                copy.appendChild(headline);
+                copy.appendChild(summary);
+                top.appendChild(number);
+                top.appendChild(copy);
+                card.appendChild(top);
+                list.appendChild(card);
+            });
+
+            wrapper.appendChild(list);
+
+            const sources = parseSources(sourcesPart, normalized);
+            if (sources.length > 0) {
+                const sourceCard = document.createElement("div");
+                sourceCard.className = "source-card";
+
+                const sourceTitle = document.createElement("h4");
+                sourceTitle.textContent = "Sources";
+                sourceCard.appendChild(sourceTitle);
+
+                const sourceList = document.createElement("ul");
+                sourceList.className = "source-list";
+
+                sources.forEach(source => {
+                    const listItem = document.createElement("li");
+                    const anchor = document.createElement("a");
+                    anchor.href = source.url;
+                    anchor.target = "_blank";
+                    anchor.rel = "noopener noreferrer";
+                    anchor.textContent = source.name;
+                    listItem.appendChild(anchor);
+                    sourceList.appendChild(listItem);
+                });
+
+                sourceCard.appendChild(sourceList);
+                wrapper.appendChild(sourceCard);
+            }
+
+            return wrapper;
+        }
+
+        function finalizeAssistantBubble(bubble) {
+            bubble.classList.remove("loading", "streaming");
+            bubble.classList.add("formatted");
+            bubble.innerHTML = "";
+            bubble.appendChild(renderFormattedNews(latestAssistantPlainText));
+            updateCharCount();
+            scrollChatToBottom();
+        }
+
+        function finishRequest(sendBtn, emailBtn) {
+            sendBtn.disabled = false;
+            emailBtn.disabled = false;
+            closeActiveEventSource();
+        }
+
+        function getNews() {
+            const queryInput = document.getElementById("queryInput");
+            const sendBtn = document.getElementById("sendBtn");
+            const emailBtn = document.getElementById("emailBtn");
+            const query = queryInput.value.trim();
+
+            if (!query) {
+                return;
+            }
+
+            closeActiveEventSource();
+            latestAssistantPlainText = "";
+            updateCharCount();
+
+            createMessageRow("user", escapeHtml(query));
+            const assistantBubble = createThinkingBubble();
+
+            sendBtn.disabled = true;
+            emailBtn.disabled = true;
+            setStatus("Searching...");
+            setHelperText("Looking for the latest AI coverage.");
+            queryInput.value = "";
+
+            let isComplete = false;
+
+            activeEventSource = new EventSource(`/stream_news?query=${encodeURIComponent(query)}`);
+
+            activeEventSource.addEventListener("status", function(event) {
+                const stepText = event.data || "Working on your request";
+                updateThinkingBubble(assistantBubble, stepText);
+                setStatus(stepText);
+            });
+
+            activeEventSource.onmessage = function(event) {
+                const chunk = event.data || "";
+                if (!chunk) {
+                    return;
+                }
+
+                latestAssistantPlainText += chunk;
+                const streamingText = ensureStreamingView(assistantBubble);
+                streamingText.textContent = latestAssistantPlainText;
+                updateCharCount();
+                scrollChatToBottom();
+                setStatus("Writing...");
+                setHelperText("The answer is streaming in real time.");
+            };
+
+            activeEventSource.addEventListener("done", function() {
+                isComplete = true;
+                finalizeAssistantBubble(assistantBubble);
+                finishRequest(sendBtn, emailBtn);
+                setStatus("Done");
+                setHelperText("Ask another question or send this briefing by email.");
+            });
+
+            activeEventSource.onerror = function() {
+                if (isComplete) {
+                    return;
+                }
+
+                assistantBubble.classList.remove("loading");
+                assistantBubble.classList.add("formatted");
+                assistantBubble.innerHTML = "";
+
+                const fallbackText = latestAssistantPlainText.trim()
+                    ? latestAssistantPlainText
+                    : "Something went wrong while generating the briefing.";
+
+                assistantBubble.appendChild(renderFallbackResponse(fallbackText));
+                finishRequest(sendBtn, emailBtn);
+                setStatus("Error");
+                setHelperText("The request stopped unexpectedly. Please try again.");
+            };
+        }
+
+        function sendEmail() {
+            const email = document.getElementById("emailInput").value.trim();
+
+            if (!email) {
+                alert("Please enter your email.");
+                return;
+            }
+
+            if (!latestAssistantPlainText.trim()) {
+                alert("No AI news available to send.");
+                return;
+            }
+
+            fetch("/send_email", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body:
+                    "email=" + encodeURIComponent(email) +
+                    "&content=" + encodeURIComponent(latestAssistantPlainText)
+            })
+            .then(res => res.json())
+            .then(data => {
+                alert(data.message);
+            })
+            .catch(() => {
+                alert("Failed to send email.");
+            });
+        }
+    </script>
+</body>
+</html>

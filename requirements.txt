@@ -1,0 +1,9 @@
+flask
+langchain
+langchain-community
+langchain-openai
+langchain-google-genai
+langchain-groq
+langchain-anthropic
+tavily-python
+langchain-tavily
