@@ -715,7 +715,9 @@
         function renderFormattedNews(text) {
             const normalized = text.replace(/\r\n/g, "\n").trim();
             const sourceSplit = normalized.split(/###\s*Sources/i);
-            const newsPart = sourceSplit[0].replace(/^###\s*Top 3 AI News Today\s*/i, "").trim();
+            const headingMatch = sourceSplit[0].match(/^###\s*(.+)$/m);
+            const headingText = headingMatch ? headingMatch[1].trim() : "AI News Briefing";
+            const newsPart = sourceSplit[0].replace(/^###\s*.+$/m, "").trim();
             const sourcesPart = sourceSplit[1] || "";
 
             const itemRegex = /(?:^|\n)(\d+)\.\s*(.+?)(?:\n\s*-\s*|\s+-\s+)([\s\S]*?)(?=\n\d+\.\s|\n###\s*Sources|$)/g;
@@ -738,7 +740,7 @@
             wrapper.className = "news-response";
 
             const title = document.createElement("h3");
-            title.textContent = "Top 3 AI News Today";
+            title.textContent = headingText;
             wrapper.appendChild(title);
 
             const list = document.createElement("div");

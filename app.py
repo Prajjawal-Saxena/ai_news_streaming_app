@@ -142,7 +142,7 @@ def get_model():
 model = get_model()
 
 tavily_tool = TavilySearch(
-    max_results=5,
+    max_results=10,
     topic="general"
 )
 
@@ -168,7 +168,7 @@ You are an AI news assistant.
 
 Use the user's request and the search results to prepare a clean AI news briefing.
 
-Return the answer in this exact Markdown structure:
+Return the answer in this Markdown structure:
 
 ### Header
 
@@ -178,8 +178,7 @@ Return the answer in this exact Markdown structure:
 2. [Short headline]
 - [2 to 3 sentence summary]
 
-3. [Short headline]
-- [2 to 3 sentence summary]
+[Continue numbering only if needed]
 
 ### Sources
 - [Source name]: [URL]
@@ -187,12 +186,17 @@ Return the answer in this exact Markdown structure:
 Rules:
 - Use valid Markdown spacing.
 - Keep spacing natural and readable.
+- The header must match the user's request. If the user asks for the last 24 hours, use a header like "AI News From the Last 24 Hours". If the user asks for today, use "Today's AI News". If the user asks for a weekly summary, reflect that.
+- Decide the number of news items from the user's request and the available relevant results. Do not force exactly 3 items unless the user explicitly asks for 3.
+- Respect the requested timeframe exactly. If the user asks for the past 24 hours, only include news from the past 24 hours when supported by the search results. If the timeframe is unclear or the results are limited, say so briefly in one of the summaries instead of pretending.
 - Use short headlines.
 - Put each summary directly below its headline.
 - Add a blank line between each news item.
 - Do not write everything in one paragraph.
 - Always include source URLs if available.
 - Focus only on the latest relevant AI news.
+- If the user asks for simple English, write in simple English.
+- If the user asks to avoid jargon, avoid jargon or explain it simply.
 - Do not add any introduction or closing note outside this structure.
 
 User Request:
