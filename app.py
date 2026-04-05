@@ -1,10 +1,6 @@
-from flask import Flask, render_template, request, Response, jsonify
-import datetime, os, json
+from flask import Flask, render_template, request, Response
+import os
 from dotenv import load_dotenv
-import smtplib
-from email.mime.text import MIMEText
-from urllib import error as urllib_error
-from urllib import request as urllib_request
 
 # LangChain
 from langchain.chat_models import init_chat_model
@@ -13,53 +9,7 @@ from langchain_tavily import TavilySearch
 # ---------------- Load ENV ----------------
 load_dotenv()
 
-EMAIL_USER = (os.getenv("EMAIL_USER") or "").strip()
-EMAIL_PASS = (os.getenv("EMAIL_PASS") or "").strip().replace(" ", "")
-RESEND_API_KEY = (os.getenv("RESEND_API_KEY") or "").strip()
-RESEND_FROM_EMAIL = (os.getenv("RESEND_FROM_EMAIL") or "").strip()
-
 app = Flask(__name__)
-DATA_FILE = "data.txt"
-
-
-def get_today_string():
-    return str(datetime.date.today())
-
-
-def load_email_entries():
-    if not os.path.exists(DATA_FILE):
-        return []
-
-    entries = []
-
-    with open(DATA_FILE, "r") as f:
-        for line in f:
-            entry = line.strip()
-            if not entry or "," not in entry:
-                continue
-
-            saved_email, saved_date = entry.split(",", 1)
-            entries.append((saved_email.strip(), saved_date.strip()))
-
-    return entries
-
-
-def cleanup_old_email_entries():
-    today = get_today_string()
-    today_entries = [
-        (saved_email, saved_date)
-        for saved_email, saved_date in load_email_entries()
-        if saved_date == today
-    ]
-
-    if not today_entries:
-        if os.path.exists(DATA_FILE):
-            open(DATA_FILE, "w").close()
-        return
-
-    with open(DATA_FILE, "w") as f:
-        for saved_email, saved_date in today_entries:
-            f.write(f"{saved_email},{saved_date}\n")
 
 
 def sse_message(data, event=None):
@@ -99,101 +49,6 @@ def chunk_to_text(chunk):
         return "".join(parts)
 
     return str(content or "")
-
-# ---------------- Email Limit ----------------
-def check_email_limit(email):
-    if not email:
-        return True
-
-    cleanup_old_email_entries()
-    today = get_today_string()
-
-    for saved_email, saved_date in load_email_entries():
-        if saved_email == email and saved_date == today:
-            return False
-
-    return True
-
-
-def save_email(email):
-    if not email:
-        return
-
-    cleanup_old_email_entries()
-    today = get_today_string()
-
-    with open(DATA_FILE, "a") as f:
-        f.write(f"{email},{today}\n")
-
-
-# ---------------- Email Send ----------------
-def send_email_via_resend(receiver_email, content):
-    if not RESEND_API_KEY:
-        raise ValueError("RESEND_API_KEY is missing in .env or Render environment variables.")
-
-    if not RESEND_FROM_EMAIL:
-        raise ValueError("RESEND_FROM_EMAIL is missing in .env or Render environment variables.")
-
-    payload = {
-        "from": RESEND_FROM_EMAIL,
-        "to": [receiver_email],
-        "subject": "Your AI News Update",
-        "text": content,
-    }
-
-    req = urllib_request.Request(
-        url="https://api.resend.com/emails",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {RESEND_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        method="POST"
-    )
-
-    try:
-        with urllib_request.urlopen(req, timeout=30) as response:
-            response_body = response.read().decode("utf-8")
-            if response.status >= 400:
-                raise ValueError(f"Resend request failed: {response_body}")
-            return response_body
-    except urllib_error.HTTPError as e:
-        error_body = e.read().decode("utf-8", errors="replace")
-        raise ValueError(f"Resend API error ({e.code}): {error_body}") from e
-    except urllib_error.URLError as e:
-        raise ValueError(f"Unable to reach Resend API: {e.reason}") from e
-
-
-def send_email_via_smtp(receiver_email, content):
-    if not EMAIL_USER:
-        raise ValueError("EMAIL_USER is missing in .env")
-
-    if not EMAIL_PASS:
-        raise ValueError("EMAIL_PASS is missing in .env")
-
-    if EMAIL_USER.endswith("@gmail.com") and len(EMAIL_PASS) != 16:
-        raise ValueError(
-            "Gmail requires a 16-character app password in EMAIL_PASS. "
-            "Please generate a new app password and restart the app."
-        )
-
-    msg = MIMEText(content)
-    msg["Subject"] = "Your AI News Update"
-    msg["From"] = EMAIL_USER
-    msg["To"] = receiver_email
-
-    with smtplib.SMTP("smtp.gmail.com", 587) as server:
-        server.starttls()
-        server.login(EMAIL_USER, EMAIL_PASS)
-        server.send_message(msg)
-
-
-def send_email_to_user(receiver_email, content):
-    if RESEND_API_KEY:
-        return send_email_via_resend(receiver_email, content)
-
-    return send_email_via_smtp(receiver_email, content)
-
 
 # ---------------- LLM Loader ----------------
 def get_model():
@@ -318,45 +173,6 @@ Search Results:
             "X-Accel-Buffering": "no"
         }
     )
-
-
-@app.route("/send_email", methods=["POST"])
-def send_email():
-    try:
-        email = (request.form.get("email") or "").strip()
-        content = (request.form.get("content") or "").strip()
-
-        if not email:
-            return jsonify({
-                "status": "fail",
-                "message": "Please enter an email address."
-            }), 400
-
-        if not content:
-            return jsonify({
-                "status": "fail",
-                "message": "No news content is available to send."
-            }), 400
-
-        if not check_email_limit(email):
-            return jsonify({
-                "status": "fail",
-                "message": "Email already used today."
-            }), 429
-
-        send_email_to_user(email, content)
-        save_email(email)
-
-        return jsonify({
-            "status": "success",
-            "message": "Email sent successfully!"
-        })
-
-    except Exception as e:
-        return jsonify({
-            "status": "fail",
-            "message": str(e)
-        }), 500
 
 
 # ---------------- Run ----------------
