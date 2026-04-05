@@ -170,7 +170,7 @@ Use the user's request and the search results to prepare a clean AI news briefin
 
 Return the answer in this exact Markdown structure:
 
-### Top 3 AI News Today
+### Header
 
 1. [Short headline]
 - [2 to 3 sentence summary]
