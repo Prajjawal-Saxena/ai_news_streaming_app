@@ -1,4 +1,5 @@
 flask
+gunicorn
 langchain
 langchain-community
 langchain-openai
