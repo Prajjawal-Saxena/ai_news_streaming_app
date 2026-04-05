@@ -385,6 +385,23 @@
             transform: none;
         }
 
+        .button-content {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .button-loader {
+            width: 14px;
+            height: 14px;
+            border-radius: 999px;
+            border: 2px solid rgba(8, 18, 36, 0.18);
+            border-top-color: #081224;
+            border-right-color: #0ea5e9;
+            animation: spin 0.8s linear infinite;
+        }
+
         .meta {
             display: flex;
             justify-content: space-between;
@@ -401,6 +418,15 @@
             }
             100% {
                 transform: translateX(320%);
+            }
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
             }
         }
 
@@ -899,6 +925,8 @@
 
         function sendEmail() {
             const email = document.getElementById("emailInput").value.trim();
+            const emailBtn = document.getElementById("emailBtn");
+            const originalLabel = emailBtn.innerHTML;
 
             if (!email) {
                 alert("Please enter your email.");
@@ -909,6 +937,15 @@
                 alert("No AI news available to send.");
                 return;
             }
+
+            emailBtn.disabled = true;
+            emailBtn.innerHTML = [
+                "<span class='button-content'>",
+                "  <span class='button-loader'></span>",
+                "  <span>Sending...</span>",
+                "</span>"
+            ].join("");
+            setHelperText("Sending your AI briefing by email.");
 
             fetch("/send_email", {
                 method: "POST",
@@ -925,6 +962,11 @@
             })
             .catch(() => {
                 alert("Failed to send email.");
+            })
+            .finally(() => {
+                emailBtn.disabled = false;
+                emailBtn.innerHTML = originalLabel;
+                setHelperText("Ask another question or send this briefing by email.");
             });
         }
     </script>

@@ -18,6 +18,46 @@ app = Flask(__name__)
 DATA_FILE = "data.txt"
 
 
+def get_today_string():
+    return str(datetime.date.today())
+
+
+def load_email_entries():
+    if not os.path.exists(DATA_FILE):
+        return []
+
+    entries = []
+
+    with open(DATA_FILE, "r") as f:
+        for line in f:
+            entry = line.strip()
+            if not entry or "," not in entry:
+                continue
+
+            saved_email, saved_date = entry.split(",", 1)
+            entries.append((saved_email.strip(), saved_date.strip()))
+
+    return entries
+
+
+def cleanup_old_email_entries():
+    today = get_today_string()
+    today_entries = [
+        (saved_email, saved_date)
+        for saved_email, saved_date in load_email_entries()
+        if saved_date == today
+    ]
+
+    if not today_entries:
+        if os.path.exists(DATA_FILE):
+            open(DATA_FILE, "w").close()
+        return
+
+    with open(DATA_FILE, "w") as f:
+        for saved_email, saved_date in today_entries:
+            f.write(f"{saved_email},{saved_date}\n")
+
+
 def sse_message(data, event=None):
     payload = str(data).replace("\r\n", "\n").replace("\r", "\n")
     lines = []
@@ -58,22 +98,25 @@ def chunk_to_text(chunk):
 
 # ---------------- Email Limit ----------------
 def check_email_limit(email):
-    today = str(datetime.date.today())
-
-    if not os.path.exists(DATA_FILE):
+    if not email:
         return True
 
-    with open(DATA_FILE, "r") as f:
-        for line in f:
-            saved_email, saved_date = line.strip().split(",")
-            if saved_email == email and saved_date == today:
-                return False
+    cleanup_old_email_entries()
+    today = get_today_string()
+
+    for saved_email, saved_date in load_email_entries():
+        if saved_email == email and saved_date == today:
+            return False
 
     return True
 
 
 def save_email(email):
-    today = str(datetime.date.today())
+    if not email:
+        return
+
+    cleanup_old_email_entries()
+    today = get_today_string()
 
     with open(DATA_FILE, "a") as f:
         f.write(f"{email},{today}\n")
@@ -231,16 +274,28 @@ Search Results:
 
 @app.route("/send_email", methods=["POST"])
 def send_email():
-    email = request.form.get("email")
-    content = request.form.get("content")
-
-    if not check_email_limit(email):
-        return jsonify({
-            "status": "fail",
-            "message": "Email already used today."
-        })
-
     try:
+        email = (request.form.get("email") or "").strip()
+        content = (request.form.get("content") or "").strip()
+
+        if not email:
+            return jsonify({
+                "status": "fail",
+                "message": "Please enter an email address."
+            }), 400
+
+        if not content:
+            return jsonify({
+                "status": "fail",
+                "message": "No news content is available to send."
+            }), 400
+
+        if not check_email_limit(email):
+            return jsonify({
+                "status": "fail",
+                "message": "Email already used today."
+            }), 429
+
         send_email_to_user(email, content)
         save_email(email)
 
@@ -253,7 +308,7 @@ def send_email():
         return jsonify({
             "status": "fail",
             "message": str(e)
-        })
+        }), 500
 
 
 # ---------------- Run ----------------
