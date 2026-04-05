@@ -1,8 +1,10 @@
 from flask import Flask, render_template, request, Response, jsonify
-import datetime, os
+import datetime, os, json
 from dotenv import load_dotenv
 import smtplib
 from email.mime.text import MIMEText
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 # LangChain
 from langchain.chat_models import init_chat_model
@@ -13,6 +15,8 @@ load_dotenv()
 
 EMAIL_USER = (os.getenv("EMAIL_USER") or "").strip()
 EMAIL_PASS = (os.getenv("EMAIL_PASS") or "").strip().replace(" ", "")
+RESEND_API_KEY = (os.getenv("RESEND_API_KEY") or "").strip()
+RESEND_FROM_EMAIL = (os.getenv("RESEND_FROM_EMAIL") or "").strip()
 
 app = Flask(__name__)
 DATA_FILE = "data.txt"
@@ -123,7 +127,44 @@ def save_email(email):
 
 
 # ---------------- Email Send ----------------
-def send_email_to_user(receiver_email, content):
+def send_email_via_resend(receiver_email, content):
+    if not RESEND_API_KEY:
+        raise ValueError("RESEND_API_KEY is missing in .env or Render environment variables.")
+
+    if not RESEND_FROM_EMAIL:
+        raise ValueError("RESEND_FROM_EMAIL is missing in .env or Render environment variables.")
+
+    payload = {
+        "from": RESEND_FROM_EMAIL,
+        "to": [receiver_email],
+        "subject": "Your AI News Update",
+        "text": content,
+    }
+
+    req = urllib_request.Request(
+        url="https://api.resend.com/emails",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST"
+    )
+
+    try:
+        with urllib_request.urlopen(req, timeout=30) as response:
+            response_body = response.read().decode("utf-8")
+            if response.status >= 400:
+                raise ValueError(f"Resend request failed: {response_body}")
+            return response_body
+    except urllib_error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        raise ValueError(f"Resend API error ({e.code}): {error_body}") from e
+    except urllib_error.URLError as e:
+        raise ValueError(f"Unable to reach Resend API: {e.reason}") from e
+
+
+def send_email_via_smtp(receiver_email, content):
     if not EMAIL_USER:
         raise ValueError("EMAIL_USER is missing in .env")
 
@@ -145,6 +186,13 @@ def send_email_to_user(receiver_email, content):
         server.starttls()
         server.login(EMAIL_USER, EMAIL_PASS)
         server.send_message(msg)
+
+
+def send_email_to_user(receiver_email, content):
+    if RESEND_API_KEY:
+        return send_email_via_resend(receiver_email, content)
+
+    return send_email_via_smtp(receiver_email, content)
 
 
 # ---------------- LLM Loader ----------------
